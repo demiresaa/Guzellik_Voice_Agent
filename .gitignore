@@ -3,3 +3,9 @@ __pycache__/
 *.log
 .DS_Store
 .claude/
+.env
+*.pyc
+*.pyo
+*.db
+*.sqlite
+appointments.txt
