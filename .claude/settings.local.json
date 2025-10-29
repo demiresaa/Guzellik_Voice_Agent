@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m skd.services.conversation_agent.cli:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

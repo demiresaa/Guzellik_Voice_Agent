@@ -1,0 +1,8 @@
+# services/booking_agent_service/main.py
+
+import uvicorn
+from .api import app
+
+if __name__ == "__main__":
+    print("Booking Agent (FastMCP) Servisi başlatılıyor...")
+    uvicorn.run(app, host="0.0.0.0", port=8001)
