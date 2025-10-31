@@ -5,7 +5,7 @@ Pydantic schemas for Notification & Payment Tools.
 Staff Engineer principle: External service integration, security, compliance.
 """
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, model_validator
 from datetime import datetime
 from typing import Optional, Dict, Any
 import re
@@ -71,23 +71,19 @@ class SendSmsRequest(BaseModel):
             raise ValueError(f'message_type must be one of {allowed_types}')
         return v.lower()
 
-    @root_validator
-    def validate_promotional_consent(cls, values):
+    @model_validator(mode='after')
+    def validate_promotional_consent(self):
         """
         Promotional messages require explicit customer_id and consent check.
 
         Security: GDPR/KVKK compliance - no marketing without consent.
         """
-        message_type = values.get('message_type')
-        customer_id = values.get('customer_id')
-        force_send = values.get('force_send')
-
-        if message_type in ['promotional', 'birthday'] and not customer_id and not force_send:
+        if self.message_type in ['promotional', 'birthday'] and not self.customer_id and not self.force_send:
             raise ValueError(
                 'Promotional messages require customer_id for consent verification'
             )
 
-        return values
+        return self
 
     class Config:
         json_schema_extra = {
@@ -232,7 +228,7 @@ class RequestPrepaymentRequest(BaseModel):
         le=72
     )
 
-    @validator('phone_number')
+    @validator('customer_phone')
     def validate_phone(cls, v):
         """Sanitize phone number"""
         cleaned = re.sub(r'\D', '', v)

@@ -37,7 +37,7 @@ class Appointment:
 
     appointment_id: str = field(default_factory=lambda: f"APT-{uuid.uuid4().hex[:8].upper()}")
     customer_id: str = ""
-    customer_phone: str = field(metadata={"pii": True})
+    customer_phone: str = field(default="", metadata={"pii": True})
 
     # Scheduling
     appointment_date: datetime = field(default_factory=datetime.utcnow)

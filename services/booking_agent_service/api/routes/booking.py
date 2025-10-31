@@ -234,3 +234,45 @@ async def cancel_appointment(
                 "details": str(e)
             }
         )
+
+
+@router.get(
+    "/appointments",
+    summary="List All Appointments",
+    description="Get all appointments from in-memory database (for debugging)"
+)
+async def list_appointments(
+    api_key: Annotated[str, Depends(get_api_key)]
+):
+    """
+    **Debug Endpoint: List All Appointments**
+
+    Returns all appointments currently in the in-memory database.
+    Useful for checking what appointments have been created.
+    """
+    from ...repositories.base import db
+
+    appointments_dict = db.get_appointments()
+
+    # Convert to list with formatted data
+    appointments_list = []
+    for appt_id, appt in appointments_dict.items():
+        appointments_list.append({
+            "appointment_id": appt.appointment_id,
+            "customer_id": appt.customer_id,
+            "customer_phone": appt.customer_phone,
+            "customer_name": appt.customer_name,
+            "services": appt.services,
+            "start_time": appt.start_time.isoformat(),
+            "end_time": appt.end_time.isoformat(),
+            "specialist_name": appt.specialist_name,
+            "status": appt.status.value,
+            "total_price": appt.total_price,
+            "created_at": appt.created_at.isoformat() if appt.created_at else None
+        })
+
+    return {
+        "success": True,
+        "total_appointments": len(appointments_list),
+        "appointments": appointments_list
+    }

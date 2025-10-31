@@ -60,6 +60,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra environment variables from shared .env
 
     @validator("LOG_LEVEL")
     def validate_log_level(cls, v):

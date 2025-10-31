@@ -23,10 +23,13 @@ class Customer:
     - Data retention policies
     """
 
-    customer_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    # Required fields (no defaults) must come first
     phone_number: str = field(metadata={"pii": True})  # Primary identifier
     name: str = field(metadata={"pii": True})
     surname: str = field(metadata={"pii": True})
+
+    # Auto-generated ID
+    customer_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     # Optional fields
     email: Optional[str] = field(default=None, metadata={"pii": True})

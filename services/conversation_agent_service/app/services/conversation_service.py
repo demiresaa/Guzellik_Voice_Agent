@@ -11,7 +11,7 @@ import asyncio
 import time
 import json
 from typing import Optional, AsyncGenerator, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiohttp
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -87,6 +87,8 @@ class ConversationService:
         Returns:
             List of StructuredTool instances
         """
+        from datetime import datetime as dt
+
         tools = [
             # Tool #1: Get Customer Info
             StructuredTool.from_function(
@@ -124,15 +126,17 @@ class ConversationService:
             StructuredTool.from_function(
                 func=self._check_availability,
                 name="check_availability",
-                description="""
+                description=f"""
                 Hizmetler için müsait zaman dilimlerini kontrol et.
+                ÖNEMLİ: BUGÜN {dt.now().strftime('%Y-%m-%d')} - GEÇMİŞ TARİH GÖNDERİLEMEZ!
                 Args:
                     services (str): Hizmet adları (virgülle ayrılmış)
                     specialist_name (str, optional): Uzman tercihi
-                    date_from (str, optional): Başlangıç tarihi (YYYY-MM-DD)
+                    date_from (str, optional): Başlangıç tarihi (YYYY-MM-DD format, BUGÜN VEYA GELECEK)
                     preferred_time (str, optional): morning/afternoon/evening
                 Returns:
                     dict: Müsait slotlar
+                ÖRNEK: Yarın için aramak istiyorsan date_from="{(dt.now() + timedelta(days=1)).strftime('%Y-%m-%d')}"
                 """,
                 coroutine=self._check_availability_async
             ),
@@ -209,11 +213,16 @@ class ConversationService:
         Create LangChain agent runnable.
 
         Returns:
-            A runnable agent instance
+            Agent runnable (LangGraph-based)
         """
-        # System prompt
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """Sen bir Güzellik Merkezi Randevu Asistanısın.
+        # Get today's date for context
+        from datetime import datetime as dt
+        today = dt.now().strftime("%Y-%m-%d")
+
+        # System instruction for Gemini
+        system_instruction = f"""Sen bir Güzellik Merkezi Randevu Asistanısın.
+
+**BUGÜNÜN TARİHİ:** {today}
 
 **GÖREV AKIŞI:**
 
@@ -228,7 +237,7 @@ class ConversationService:
 
 3. **RANDEVU ALMA**
    - Hizmet, tarih, uzman tercihlerini sor
-   - check_availability ile slotları bul
+   - check_availability ile slotları bul (date_from BUGÜN veya GELECEK olmalı!)
    - Seçenekleri sun
    - Onay alınca create_appointment kullan
    - Randevu kodunu söyle
@@ -244,15 +253,23 @@ class ConversationService:
 - Her zaman önce müşteriyi tanımla
 - Randevu kodunu mutlaka söyle
 - Araçları doğru sırayla kullan
+- Tarihleri hesaplarken BUGÜNÜN TARİHİNİ ({today}) kullan!
 
-**ÖNEMLİ:** Yanıtların kısa ve net olsun. Gereksiz açıklama yapma."""),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
+**ÖNEMLİ:** Yanıtların kısa ve net olsun. Gereksiz açıklama yapma."""
 
-        # Create agent runnable
-        return create_agent(self.llm, self.tools, prompt)
+        # Configure LLM with system instruction
+        llm_with_system = ChatGoogleGenerativeAI(
+            model=self.settings.GEMINI_MODEL,
+            temperature=self.settings.GEMINI_TEMPERATURE,
+            max_tokens=self.settings.GEMINI_MAX_TOKENS,
+            timeout=self.settings.GEMINI_TIMEOUT_SECONDS,
+            google_api_key=self.settings.GEMINI_API_KEY,
+            # System instruction for Gemini
+            system_instruction=system_instruction
+        )
+
+        # Create agent (new API: llm, tools)
+        return create_agent(llm_with_system, self.tools)
 
     # ========================================================================
     # Tool Implementations (Booking Agent Client)
@@ -559,36 +576,47 @@ class ConversationService:
                 data={"message": "İşleniyor..."}
             ).to_sse_format()
 
-            # Execute agent with streaming
-            async for chunk in self.agent_executor.astream({
-                "input": user_message,
-                "chat_history": chat_history
-            }):
-                # Handle tool calls
-                if "actions" in chunk:
-                    for action in chunk["actions"]:
-                        tool_calls_made.append({
-                            "tool": action.tool,
-                            "input": action.tool_input
-                        })
+            # Execute agent with streaming (LangGraph format)
+            async for event in self.agent_executor.astream_events(
+                {"messages": chat_history + [HumanMessage(content=user_message)]},
+                version="v1"
+            ):
+                kind = event.get("event")
 
-                        yield SSEMessage(
-                            event="tool_call",
-                            data={
-                                "tool": action.tool,
-                                "status": "running"
-                            }
-                        ).to_sse_format()
-
-                # Handle output tokens
-                if "output" in chunk:
-                    token = chunk["output"]
-                    full_response += token
+                # Tool call events
+                if kind == "on_tool_start":
+                    tool_name = event.get("name", "unknown")
+                    tool_calls_made.append({
+                        "tool": tool_name,
+                        "input": event.get("data", {}).get("input", {})
+                    })
 
                     yield SSEMessage(
-                        event="token",
-                        data={"token": token}
+                        event="tool_call",
+                        data={"tool": tool_name, "status": "running"}
                     ).to_sse_format()
+
+                # LLM token streaming
+                elif kind == "on_chat_model_stream":
+                    content = event.get("data", {}).get("chunk", {})
+                    if hasattr(content, "content") and content.content:
+                        token = content.content
+                        full_response += token
+
+                        yield SSEMessage(
+                            event="token",
+                            data={"token": token}
+                        ).to_sse_format()
+
+                # Agent finished
+                elif kind == "on_chain_end" and event.get("name") == "LangGraph":
+                    # Get final messages
+                    output_messages = event.get("data", {}).get("output", {}).get("messages", [])
+                    if output_messages and not full_response:
+                        # If we didn't stream, get the final message
+                        last_msg = output_messages[-1]
+                        if hasattr(last_msg, "content"):
+                            full_response = last_msg.content
 
             # Calculate metrics
             latency_ms = int((time.time() - start_time) * 1000)

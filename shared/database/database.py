@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker
 )
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 
 from shared.common.logging import get_logger
 from shared.common.config import BaseSettings
@@ -70,7 +70,6 @@ def init_database(
     _engine = create_async_engine(
         database_url,
         echo=echo,
-        poolclass=QueuePool,
         pool_size=pool_size,
         max_overflow=max_overflow,
         pool_timeout=pool_timeout,

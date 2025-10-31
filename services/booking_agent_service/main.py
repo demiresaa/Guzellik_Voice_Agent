@@ -278,7 +278,7 @@ if __name__ == "__main__":
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
 
     uvicorn.run(
-        "main:app",
+        "services.booking_agent_service.main:app",
         host="0.0.0.0",
         port=8001,
         reload=settings.DEBUG,

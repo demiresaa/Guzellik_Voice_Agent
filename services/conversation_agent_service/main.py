@@ -217,7 +217,7 @@ async def app_exception_handler(request: Request, exc: BaseAppException):
     """Handle application exceptions."""
     logger.error("Application error", extra={
         "error_code": exc.error_code,
-        "message": exc.message,
+        "error_message": exc.message,
         "details": exc.details
     })
 

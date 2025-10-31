@@ -5,7 +5,7 @@ Pydantic schemas for Booking Management API.
 Staff Engineer principle: Complex business rules, time validation, conflict detection.
 """
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, model_validator
 from datetime import datetime, date, time, timedelta
 from typing import Optional, List
 import re
@@ -133,11 +133,11 @@ class CheckAvailabilityRequest(BaseModel):
             raise ValueError('Cannot search availability for past dates')
         return v or date.today()
 
-    @root_validator
-    def validate_date_range(cls, values):
+    @model_validator(mode='after')
+    def validate_date_range(self):
         """Validate date range is reasonable"""
-        date_from = values.get('date_from') or date.today()
-        date_to = values.get('date_to') or (date_from + timedelta(days=7))
+        date_from = self.date_from or date.today()
+        date_to = self.date_to or (date_from + timedelta(days=7))
 
         if date_to < date_from:
             raise ValueError('date_to must be after date_from')
@@ -145,9 +145,9 @@ class CheckAvailabilityRequest(BaseModel):
         if (date_to - date_from).days > 30:
             raise ValueError('Date range cannot exceed 30 days')
 
-        values['date_from'] = date_from
-        values['date_to'] = date_to
-        return values
+        self.date_from = date_from
+        self.date_to = date_to
+        return self
 
     @validator('preferred_time')
     def validate_preferred_time(cls, v):
@@ -264,13 +264,12 @@ class CreateAppointmentRequest(BaseModel):
             raise ValueError('Invalid characters in notes')
         return v.strip() if v else None
 
-    @root_validator
-    def validate_appointment_time(cls, values):
+    @model_validator(mode='after')
+    def validate_appointment_time(self):
         """Cannot book appointments in the past"""
-        slot = values.get('selected_slot')
-        if slot and slot.start_time < datetime.utcnow():
+        if self.selected_slot and self.selected_slot.start_time < datetime.utcnow():
             raise ValueError('Cannot book appointments in the past')
-        return values
+        return self
 
     class Config:
         json_schema_extra = {
@@ -373,12 +372,12 @@ class CancelAppointmentRequest(BaseModel):
             cleaned = '0' + cleaned
         return cleaned
 
-    @root_validator
-    def require_identification(cls, values):
+    @model_validator(mode='after')
+    def require_identification(self):
         """Must provide either appointment_id or customer_phone"""
-        if not values.get('appointment_id') and not values.get('customer_phone'):
+        if not self.appointment_id and not self.customer_phone:
             raise ValueError('Must provide either appointment_id or customer_phone')
-        return values
+        return self
 
     @validator('cancellation_reason')
     def sanitize_reason(cls, v):
