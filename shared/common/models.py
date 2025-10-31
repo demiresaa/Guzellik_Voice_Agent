@@ -5,7 +5,7 @@ Shared Pydantic Models
 
 Common request/response models used across services.
 """
-
+from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Any, Dict, List
 from datetime import datetime
@@ -156,7 +156,7 @@ class SSEMessage(BaseModel):
 class TokenMessage(SSEMessage):
     """SSE message for LLM token streaming."""
 
-    event: str = Field(default="token", const=True)
+    event: Literal["token"] = Field(default="token")
     data: Dict[str, str] = Field(
         ...,
         description="Token data",
@@ -167,7 +167,7 @@ class TokenMessage(SSEMessage):
 class ToolCallMessage(SSEMessage):
     """SSE message for tool call notification."""
 
-    event: str = Field(default="tool_call", const=True)
+    event: Literal["tool_call"] = Field(default="tool_call")
     data: Dict[str, Any] = Field(
         ...,
         description="Tool call data",
@@ -184,7 +184,7 @@ class ToolCallMessage(SSEMessage):
 class StatusMessage(SSEMessage):
     """SSE message for status updates."""
 
-    event: str = Field(default="status", const=True)
+    event: Literal["status"] = Field(default="status")
     data: Dict[str, str] = Field(
         ...,
         description="Status data",
@@ -195,7 +195,7 @@ class StatusMessage(SSEMessage):
 class ErrorMessage(SSEMessage):
     """SSE message for errors."""
 
-    event: str = Field(default="error", const=True)
+    event: Literal["error"] = Field(default="error")
     data: Dict[str, Any] = Field(
         ...,
         description="Error data",
@@ -211,7 +211,7 @@ class ErrorMessage(SSEMessage):
 class DoneMessage(SSEMessage):
     """SSE message for conversation completion."""
 
-    event: str = Field(default="done", const=True)
+    event: Literal["done"] = Field(default="done")
     data: Dict[str, Any] = Field(
         default_factory=dict,
         description="Completion data"

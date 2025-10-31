@@ -26,7 +26,7 @@ class BaseSettings(PydanticBaseSettings):
     """
 
     # Service Identity
-    SERVICE_NAME: str = Field(..., description="Service name for logging and tracing")
+    SERVICE_NAME: str = Field(default="base-service", description="Service name for logging and tracing")
     SERVICE_VERSION: str = Field(default="2.0.0", description="Service version")
 
     # Environment

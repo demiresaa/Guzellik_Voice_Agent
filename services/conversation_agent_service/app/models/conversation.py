@@ -104,7 +104,7 @@ class Conversation(Base, TimestampMixin):
     )
 
     # Additional Data
-    metadata: Mapped[Optional[dict]] = mapped_column(
+    additional_data: Mapped[Optional[dict]] = mapped_column(
         JSON,
         nullable=True,
         comment="Additional conversation metadata"
@@ -190,7 +190,7 @@ class Message(Base, TimestampMixin):
     )
 
     # Additional Data
-    metadata: Mapped[Optional[dict]] = mapped_column(
+    additional_data: Mapped[Optional[dict]] = mapped_column(
         JSON,
         nullable=True,
         comment="Additional message metadata"

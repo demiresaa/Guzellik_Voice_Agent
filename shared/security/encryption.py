@@ -12,7 +12,7 @@ import base64
 from typing import Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import bcrypt
 
 from shared.common.logging import get_logger
@@ -198,7 +198,7 @@ def derive_key_from_password(password: str, salt: Optional[bytes] = None) -> tup
     if salt is None:
         salt = secrets.token_bytes(16)
 
-    kdf = PBKDF2(
+    kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,

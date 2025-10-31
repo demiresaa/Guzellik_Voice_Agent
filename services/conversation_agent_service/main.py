@@ -25,8 +25,8 @@ import time
 from shared.common.logging import setup_logging, get_logger, set_trace_context, clear_trace_context
 from shared.common.exceptions import BaseAppException
 from shared.common.models import HealthCheckResponse, HealthStatus
-from shared.database import init_database, close_database, check_database_connection
-from shared.security import init_rate_limiter
+from shared.database.database import init_database, close_database, check_database_connection
+from shared.security.rate_limiter import init_rate_limiter
 
 from config import get_settings
 from app.api.routes import conversation

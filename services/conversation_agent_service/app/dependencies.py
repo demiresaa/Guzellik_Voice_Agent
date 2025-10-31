@@ -9,6 +9,7 @@ Dependency injection for services and repositories.
 from functools import lru_cache
 from typing import AsyncGenerator
 
+from fastapi import Depends
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,7 +105,7 @@ def get_session_service() -> SessionService:
 
 
 async def get_conversation_repository(
-    session: AsyncSession = get_async_session
+    session: AsyncSession = Depends(get_async_session)
 ) -> ConversationRepository:
     """
     Get conversation repository (dependency).
@@ -118,8 +119,8 @@ async def get_conversation_repository(
     return ConversationRepository(session)
 
 
-def get_conversation_service(
-    session: AsyncSession = get_async_session
+async def get_conversation_service(
+    session: AsyncSession = Depends(get_async_session)
 ) -> ConversationService:
     """
     Get conversation service (dependency).

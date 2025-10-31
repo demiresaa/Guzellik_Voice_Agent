@@ -16,8 +16,8 @@ from datetime import datetime
 import aiohttp
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain.tools import StructuredTool
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.tools import StructuredTool
+from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from shared.common.logging import get_logger, set_trace_context
@@ -204,12 +204,12 @@ class ConversationService:
 
         return tools
 
-    def _create_agent(self) -> AgentExecutor:
+    def _create_agent(self) -> Any:
         """
-        Create LangChain agent executor.
+        Create LangChain agent runnable.
 
         Returns:
-            AgentExecutor instance
+            A runnable agent instance
         """
         # System prompt
         prompt = ChatPromptTemplate.from_messages([
@@ -251,17 +251,8 @@ class ConversationService:
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ])
 
-        # Create agent
-        agent = create_tool_calling_agent(self.llm, self.tools, prompt)
-
-        # Create executor
-        return AgentExecutor(
-            agent=agent,
-            tools=self.tools,
-            verbose=True,
-            handle_parsing_errors=True,
-            max_iterations=self.settings.TOOL_CALL_MAX_ITERATIONS
-        )
+        # Create agent runnable
+        return create_agent(self.llm, self.tools, prompt)
 
     # ========================================================================
     # Tool Implementations (Booking Agent Client)

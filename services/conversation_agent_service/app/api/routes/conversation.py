@@ -34,12 +34,12 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/conversation", tags=["conversation"])
 
 
-@router.post("/stream")
+@router.post("/stream", response_model=None)
 async def stream_conversation(
     request: ConversationRequest,
     conversation_service: ConversationService = Depends(get_conversation_service),
     api_key: str = Depends(require_api_key)
-):
+) -> StreamingResponse:
     """
     Process conversation with SSE streaming.
 

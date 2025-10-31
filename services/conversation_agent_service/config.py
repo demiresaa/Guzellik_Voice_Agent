@@ -97,9 +97,9 @@ class ConversationAgentSettings(BaseSettings):
 
     # Tool Calling
     TOOL_CALL_MAX_ITERATIONS: int = Field(
-        default=10,
+        default=6,
         ge=1,
-        le=20,
+        le=7,
         description="Max tool call iterations per conversation"
     )
     TOOL_CALL_TIMEOUT_SECONDS: int = Field(
