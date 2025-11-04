@@ -37,7 +37,7 @@ from .app.schemas import (
     StatusMessage
 )
 
-# Initialize
+# Initializ
 settings = get_settings()
 setup_logging(settings.SERVICE_NAME)
 logger = get_logger(__name__)
