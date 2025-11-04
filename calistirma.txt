@@ -1,0 +1,1 @@
+python -m services.booking_agent_service.main

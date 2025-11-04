@@ -56,11 +56,6 @@ class Settings(BaseSettings):
     CANCELLATION_WINDOW_HOURS: int = Field(default=24, description="Minimum hours before appointment for cancellation")
     PREPAYMENT_THRESHOLD_TRY: float = Field(default=500.0, description="Services above this price require prepayment")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-        extra = "ignore"  # Ignore extra environment variables from shared .env
 
     @validator("LOG_LEVEL")
     def validate_log_level(cls, v):
