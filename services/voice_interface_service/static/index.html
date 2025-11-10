@@ -331,6 +331,41 @@
         const sessionInfo = document.getElementById('sessionInfo');
 
         let sequenceNumber = 0;
+        let turkishVoice = null;
+
+        // Pre-load voices
+        window.speechSynthesis.onvoiceschanged = () => {
+            const voices = window.speechSynthesis.getVoices();
+            turkishVoice = voices.find(voice => voice.lang === 'tr-TR');
+            console.log("Turkish voice found:", turkishVoice);
+        };
+
+        // Function to speak text
+        function speakText(text) {
+            // Cancel any ongoing speech
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'tr-TR';
+            
+            if (turkishVoice) {
+                utterance.voice = turkishVoice;
+            }
+            
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+
+            utterance.onstart = () => updateStatus('speaking', 'Asistan konuşuyor...');
+            utterance.onend = () => {
+                if (!isRecording) {
+                    updateStatus('connected', 'Bağlandı');
+                } else {
+                    updateStatus('listening', 'Dinleniyor...');
+                }
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
 
         // Connect to WebSocket
         function connectWebSocket() {
@@ -363,13 +398,15 @@
 
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                showError('Bağlantı hatası: ' + error.message);
+                showError('Bağlantı hatası: ' + (error.message || 'Sunucuya ulaşılamıyor.'));
             };
 
-            ws.onclose = () => {
-                console.log('WebSocket closed');
-                updateStatus('disconnected', 'Bağlantı kesildi');
+            ws.onclose = (event) => {
+                console.log('WebSocket closed:', event.code, event.reason);
+                updateStatus('disconnected', 'Bağlantı kesildi. Yeniden deneniyor...');
                 micButton.disabled = true;
+                isRecording = false;
+                micButton.classList.remove('active');
 
                 // Reconnect after 3 seconds
                 setTimeout(connectWebSocket, 3000);
@@ -404,6 +441,7 @@
                     responseBox.classList.add('active');
                     responseText.textContent = message.text;
                     addToConversation('assistant', message.text);
+                    speakText(message.text); // Speak the response
                     break;
 
                 case 'error':
@@ -446,7 +484,8 @@
             conversationItems.appendChild(item);
 
             // Scroll to bottom
-            conversationItems.scrollTop = conversationItems.scrollHeight;
+            const historyBox = document.getElementById('conversationHistory');
+            historyBox.scrollTop = historyBox.scrollHeight;
         }
 
         // Start/stop recording
@@ -460,6 +499,9 @@
 
         // Start recording
         async function startRecording() {
+            // Stop any currently playing speech
+            window.speechSynthesis.cancel();
+
             try {
                 // Request microphone access
                 mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -547,6 +589,14 @@
 
         // Initialize
         window.addEventListener('load', () => {
+            // Ensure voices are loaded
+            if (speechSynthesis.getVoices().length === 0) {
+                speechSynthesis.addEventListener('voiceschanged', () => {
+                     turkishVoice = speechSynthesis.getVoices().find(voice => voice.lang === 'tr-TR');
+                });
+            } else {
+                 turkishVoice = speechSynthesis.getVoices().find(voice => voice.lang === 'tr-TR');
+            }
             connectWebSocket();
         });
 

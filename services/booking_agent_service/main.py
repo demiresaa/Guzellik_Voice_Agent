@@ -14,6 +14,10 @@ Features:
 - Error handling
 """
 
+# Explicitly load .env file before other imports
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware

@@ -505,8 +505,9 @@ class ConversationService:
         user_message: str,
         user_id: Optional[str] = None,
         phone_number: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> AsyncGenerator[SSEMessage, None]:
+        metadata: Optional[Dict[str, Any]] = None,
+        format_for_sse: bool = True
+    ) -> AsyncGenerator[SSEMessage | str, None]:
         """
         Process user message with SSE streaming.
 
@@ -516,11 +517,15 @@ class ConversationService:
             user_id: User ID (optional)
             phone_number: Phone number (optional)
             metadata: Additional metadata
+            format_for_sse: If True, yields SSE-formatted strings. If False, yields SSEMessage objects.
 
         Yields:
-            SSEMessage instances for streaming
+            SSEMessage instances or formatted strings for streaming
         """
         start_time = time.time()
+
+        def format_yield(msg: SSEMessage):
+            return msg.to_sse_format() if format_for_sse else msg
 
         try:
             # Set trace context for logging
@@ -528,10 +533,10 @@ class ConversationService:
 
             # Validate session
             if not await self.session_service.validate_session(session_id):
-                yield SSEMessage(
+                yield format_yield(SSEMessage(
                     event="error",
                     data={"code": "INVALID_SESSION", "message": "Session not found or expired"}
-                ).to_sse_format()
+                ))
                 return
 
             # Get or create conversation
@@ -571,10 +576,10 @@ class ConversationService:
             full_response = ""
             tool_calls_made = []
 
-            yield SSEMessage(
+            yield format_yield(SSEMessage(
                 event="status",
                 data={"message": "İşleniyor..."}
-            ).to_sse_format()
+            ))
 
             # Execute agent with streaming (LangGraph format)
             async for event in self.agent_executor.astream_events(
@@ -591,10 +596,10 @@ class ConversationService:
                         "input": event.get("data", {}).get("input", {})
                     })
 
-                    yield SSEMessage(
+                    yield format_yield(SSEMessage(
                         event="tool_call",
                         data={"tool": tool_name, "status": "running"}
-                    ).to_sse_format()
+                    ))
 
                 # LLM token streaming
                 elif kind == "on_chat_model_stream":
@@ -603,10 +608,10 @@ class ConversationService:
                         token = content.content
                         full_response += token
 
-                        yield SSEMessage(
+                        yield format_yield(SSEMessage(
                             event="token",
                             data={"token": token}
-                        ).to_sse_format()
+                        ))
 
                 # Agent finished
                 elif kind == "on_chain_end" and event.get("name") == "LangGraph":
@@ -634,13 +639,13 @@ class ConversationService:
             await self.session_service.refresh_session(session_id)
 
             # Send completion event
-            yield SSEMessage(
+            yield format_yield(SSEMessage(
                 event="done",
                 data={
                     "session_id": session_id,
                     "latency_ms": latency_ms
                 }
-            ).to_sse_format()
+            ))
 
             logger.info("Message processed successfully", extra={
                 "session_id": session_id,
@@ -654,10 +659,63 @@ class ConversationService:
                 "error": str(e)
             }, exc_info=True)
 
-            yield SSEMessage(
+            yield format_yield(SSEMessage(
                 event="error",
                 data={
                     "code": "PROCESSING_ERROR",
                     "message": "Bir hata oluştu, lütfen tekrar deneyin"
                 }
-            ).to_sse_format()
+            ))
+
+    async def process_message_sync(
+        self,
+        session_id: str,
+        user_message: str,
+        user_id: Optional[str] = None,
+        phone_number: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Process user message and return a single, complete response.
+
+        Args:
+            session_id: Session ID
+            user_message: User's message
+            user_id: User ID (optional)
+            phone_number: Phone number (optional)
+            metadata: Additional metadata
+
+        Returns:
+            The full, final response from the agent as a string.
+        """
+        full_response = ""
+        try:
+            # Call with format_for_sse=False to get raw SSEMessage objects
+            async for sse_message in self.process_message_stream(
+                session_id=session_id,
+                user_message=user_message,
+                user_id=user_id,
+                phone_number=phone_number,
+                metadata=metadata,
+                format_for_sse=False
+            ):
+                if sse_message.event == "token":
+                    # The data is already a dict
+                    token = sse_message.data.get("token", "")
+                    if token:
+                        full_response += token
+                elif sse_message.event == "error":
+                    logger.error(f"Sync processing encountered stream error: {sse_message.data}")
+                    return "Üzgünüm, bir hata oluştu."
+
+            # After streaming, if no tokens were streamed but a final response exists
+            # (e.g. from a direct tool call with no LLM response), we need to capture it.
+            # The current implementation accumulates full_response during streaming,
+            # which is correct for token-based responses.
+            # If a non-token final response is needed, logic would be added here.
+
+            return full_response
+
+        except Exception as e:
+            logger.error(f"Critical error in process_message_sync: {e}", exc_info=True)
+            return "Sistemsel bir hata nedeniyle cevap veremiyorum."

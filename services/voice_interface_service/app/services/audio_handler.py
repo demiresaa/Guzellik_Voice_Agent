@@ -33,16 +33,19 @@ class AudioStreamHandler:
 
     def __init__(
         self,
-        conversation_agent_url: str = "http://localhost:8002"
+        conversation_agent_url: str,
+        api_key: str
     ):
         """
         Initialize audio stream handler.
 
         Args:
             conversation_agent_url: URL of conversation agent service
+            api_key: The API key for authenticating with other services.
         """
         self.stt_provider = get_stt_provider()
         self.conversation_agent_url = conversation_agent_url
+        self.api_key = api_key
         self.http_client = httpx.AsyncClient(timeout=30.0)
 
         logger.info(
@@ -148,12 +151,14 @@ class AudioStreamHandler:
             )
 
         except Exception as e:
+            import traceback
+            tb_str = traceback.format_exc()
             logger.error(
-                "Error handling audio stream",
+                f"Error handling audio stream: {str(e)}\nTRACEBACK:\n{tb_str}",
                 extra={
                     "session_id": session.session_id,
                     "error": str(e),
-                    "error_type": type(e).__name__
+                    "error_type": type(e).__name__,
                 }
             )
             session.status = SessionStatus.ERROR
@@ -242,6 +247,11 @@ class AudioStreamHandler:
                 "metadata": session.metadata
             }
 
+            headers = {
+                "X-API-Key": self.api_key,
+                "Content-Type": "application/json"
+            }
+
             logger.debug(
                 "Calling conversation agent",
                 extra={
@@ -250,10 +260,10 @@ class AudioStreamHandler:
                 }
             )
 
-            response = await self.http_client.post(url, json=payload)
+            response = await self.http_client.post(url, json=payload, headers=headers)
             response.raise_for_status()
 
-            data = response.json()
+            data = response.json().get("data", {})
 
             # Store agent session ID for context
             if "session_id" in data:
@@ -271,27 +281,42 @@ class AudioStreamHandler:
 
             return response_text
 
-        except httpx.HTTPError as e:
+        except httpx.HTTPStatusError as e:
+            # Log more details for HTTP errors
+            error_body = e.response.text
             logger.error(
                 "HTTP error calling conversation agent",
                 extra={
                     "session_id": session.session_id,
                     "error": str(e),
-                    "status_code": getattr(e.response, "status_code", None)
+                    "status_code": e.response.status_code,
+                    "response_body": error_body
                 }
             )
-            return None
+            return f"Üzgünüm, bir sistem hatası oluştu (Kod: {e.response.status_code})."
+
+        except httpx.RequestError as e:
+            logger.error(
+                "Request error calling conversation agent",
+                extra={
+                    "session_id": session.session_id,
+                    "error": str(e)
+                }
+            )
+            return "Üzgünüm, asistan servisine şu anda ulaşılamıyor."
 
         except Exception as e:
+            import traceback
+            tb_str = traceback.format_exc()
             logger.error(
-                "Error calling conversation agent",
+                f"Error calling conversation agent: {str(e)}\nTRACEBACK:\n{tb_str}",
                 extra={
                     "session_id": session.session_id,
                     "error": str(e),
-                    "error_type": type(e).__name__
+                    "error_type": type(e).__name__,
                 }
             )
-            return None
+            return "Beklenmedik bir sistem hatası oluştu."
 
     async def cleanup(self) -> None:
         """Cleanup resources."""

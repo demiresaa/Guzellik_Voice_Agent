@@ -70,7 +70,7 @@ class STTSettings(BaseSettings):
 
     # Faster-Whisper Settings
     FASTER_WHISPER_MODEL: str = Field(
-        default="base",
+        default="small",
         description="Faster-Whisper model size (tiny, base, small, medium, large-v2, large-v3)"
     )
 

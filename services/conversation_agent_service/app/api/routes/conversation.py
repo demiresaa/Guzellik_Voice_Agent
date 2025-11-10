@@ -118,6 +118,55 @@ async def stream_conversation(
     )
 
 
+@router.post("/sync", response_model=BaseResponse)
+async def sync_conversation(
+    request: ConversationRequest,
+    conversation_service: ConversationService = Depends(get_conversation_service),
+    api_key: str = Depends(require_api_key)
+):
+    """
+    Process conversation and return a single synchronous response.
+    This endpoint is used by services like the Voice Interface that need a complete
+    response at once, rather than a stream.
+
+    **Security:** Requires API key authentication
+    """
+    logger.info("Sync conversation request received", extra={
+        "session_id": request.session_id,
+        "user_id": request.user_id
+    })
+
+    try:
+        # Use the synchronous processing method
+        response_text = await conversation_service.process_message_sync(
+            session_id=request.session_id,
+            user_message=request.message,
+            user_id=request.user_id,
+            phone_number=request.phone_number,
+            metadata=request.metadata
+        )
+
+        # The session_id might be updated by the service if it's new
+        # We can retrieve it from the service if needed, but for now, we return the request's
+        return BaseResponse(
+            success=True,
+            message="Conversation processed successfully.",
+            data={
+                "response": response_text,
+                "session_id": request.session_id
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error in sync_conversation: {e}", exc_info=True, extra={
+            "session_id": request.session_id
+        })
+        raise HTTPException(
+            status_code=500,
+            detail=f"An internal error occurred: {str(e)}"
+        )
+
+
 @router.get("/history/{session_id}", response_model=ConversationHistoryResponse)
 async def get_conversation_history(
     session_id: str,

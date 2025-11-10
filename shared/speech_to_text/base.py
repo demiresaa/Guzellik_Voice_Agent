@@ -165,11 +165,9 @@ class BaseSTTProvider(ABC):
         Returns:
             True if streaming is supported
         """
-        # Check if transcribe_stream is overridden
-        return (
-            self.transcribe_stream.__func__ !=
-            BaseSTTProvider.transcribe_stream.__func__
-        )
+        # Correct way to check if a method is overridden in a subclass.
+        # We check if the method on the instance is different from the one on the base class.
+        return self.transcribe_stream != BaseSTTProvider.transcribe_stream
 
     async def transcribe(
         self,

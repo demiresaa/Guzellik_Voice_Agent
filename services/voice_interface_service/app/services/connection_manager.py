@@ -9,7 +9,8 @@ Manages active WebSocket connections with concurrent session limits.
 from typing import Dict, Optional
 from fastapi import WebSocket
 import asyncio
-from datetime import datetime
+from typing import Dict, List
+from fastapi import WebSocket, WebSocketDisconnect
 
 from shared.common.logging import get_logger
 
@@ -18,13 +19,10 @@ logger = get_logger(__name__)
 
 class ConnectionManager:
     """
-    Manages WebSocket connections.
+    Manages active WebSocket connections.
 
-    Features:
-    - Connection tracking
-    - Concurrent connection limits
-    - Broadcast messaging
-    - Graceful disconnection
+    Ensures thread-safe access to connections and handles connection
+    limits, broadcasting, and cleanup.
     """
 
     def __init__(self, max_connections: int = 100):
@@ -32,16 +30,14 @@ class ConnectionManager:
         Initialize connection manager.
 
         Args:
-            max_connections: Maximum concurrent connections
+            max_connections: Maximum number of concurrent connections
         """
         self.max_connections = max_connections
         self.active_connections: Dict[str, WebSocket] = {}
         self._lock = asyncio.Lock()
+        self._logger = logger  # Initialize logger for the instance
 
-        logger.info(
-            "Connection manager initialized",
-            extra={"max_connections": max_connections}
-        )
+        self._logger.info(f"Connection manager initialized with max_connections={max_connections}")
 
     async def connect(self, session_id: str, websocket: WebSocket) -> bool:
         """
@@ -110,42 +106,38 @@ class ConnectionManager:
                     }
                 )
 
-    async def send_message(self, session_id: str, message: dict) -> bool:
-        """
-        Send message to specific connection.
+    async def re_register_connection(self, old_id: str, new_id: str):
+        """Re-register a connection with a new session ID."""
+        async with self._lock:
+            if old_id in self.active_connections:
+                websocket = self.active_connections.pop(old_id)
+                self.active_connections[new_id] = websocket
+                self._logger.info(f"Connection re-registered from {old_id} to {new_id}")
+            else:
+                self._logger.warning(f"Attempted to re-register a non-existent connection: {old_id}")
 
-        Args:
-            session_id: Target session ID
-            message: Message dictionary (will be JSON-encoded)
+    async def send_error(self, session_id: str, code: str, message: str):
+        """Send an error message to a specific client."""
+        await self.send_message(session_id, {
+            "type": "error",
+            "error_code": code,
+            "error_message": message
+        })
 
-        Returns:
-            True if sent, False if failed
-        """
-        if session_id not in self.active_connections:
-            logger.warning(
-                "Attempted to send to non-existent session",
-                extra={"session_id": session_id}
-            )
-            return False
+    async def send_message(self, session_id: str, message: dict):
+        """Send a JSON message to a specific client."""
+        async with self._lock:
+            websocket = self.active_connections.get(session_id)
+        
+        if websocket:
+            try:
+                await websocket.send_json(message)
+            except WebSocketDisconnect:
+                self._logger.warning(f"Tried to send to a disconnected client: {session_id}")
+                await self.disconnect(session_id)
+        else:
+            self._logger.warning(f"No active connection found for session_id: {session_id}")
 
-        websocket = self.active_connections[session_id]
-
-        try:
-            await websocket.send_json(message)
-            return True
-
-        except Exception as e:
-            logger.error(
-                "Failed to send message",
-                extra={
-                    "session_id": session_id,
-                    "error": str(e),
-                    "message_type": message.get("type")
-                }
-            )
-            # Connection is broken, disconnect
-            await self.disconnect(session_id)
-            return False
 
     async def broadcast(self, message: dict, exclude: Optional[str] = None) -> int:
         """

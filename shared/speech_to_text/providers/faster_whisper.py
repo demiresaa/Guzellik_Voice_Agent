@@ -57,7 +57,7 @@ class FasterWhisperProvider(BaseSTTProvider):
 
     def __init__(
         self,
-        model_size: str = "base",
+        model_size: str = "small",
         device: str = "auto",
         compute_type: str = "auto",
         cpu_threads: int = 4,
@@ -404,6 +404,11 @@ class FasterWhisperProvider(BaseSTTProvider):
                 last_error=str(e)
             )
 
+    def _transcribe_segment_sync(self, temp_path: str, transcribe_params: dict):
+        """Synchronous helper to run transcription in a separate thread."""
+        segments, info = self.model.transcribe(temp_path, **transcribe_params)
+        return list(segments), info
+
     async def transcribe_stream(
         self,
         audio_stream: AsyncIterator[bytes],
@@ -465,13 +470,18 @@ class FasterWhisperProvider(BaseSTTProvider):
                         extra={"size_bytes": len(completed_segment)}
                     )
 
-                    # Write to temp file for faster-whisper
+                    # Write to a proper WAV file for faster-whisper
+                    import wave
                     with tempfile.NamedTemporaryFile(
                         suffix=".wav",
                         delete=False
                     ) as temp_file:
                         temp_path = temp_file.name
-                        temp_file.write(completed_segment)
+                        with wave.open(temp_path, 'wb') as wf:
+                            wf.setnchannels(1)  # mono
+                            wf.setsampwidth(2)  # 16-bit
+                            wf.setframerate(sample_rate)
+                            wf.writeframes(completed_segment)
 
                     try:
                         # Transcribe parameters
@@ -482,11 +492,11 @@ class FasterWhisperProvider(BaseSTTProvider):
                             "temperature": kwargs.get("temperature", 0.0)
                         }
 
-                        # Transcribe segment
+                        # Transcribe segment in a separate thread
                         segments, info = await asyncio.to_thread(
-                            self.model.transcribe,
+                            self._transcribe_segment_sync,
                             temp_path,
-                            **transcribe_params
+                            transcribe_params
                         )
 
                         # Yield each word/segment as it comes
@@ -494,7 +504,7 @@ class FasterWhisperProvider(BaseSTTProvider):
 
                         for seg_idx, segment in enumerate(segments):
                             # Yield interim results (not final)
-                            if seg_idx < len(list(segments)) - 1:
+                            if seg_idx < len(segments) - 1:
                                 yield TranscriptionChunk(
                                     text=segment.text.strip(),
                                     is_final=False,
@@ -545,8 +555,10 @@ class FasterWhisperProvider(BaseSTTProvider):
             raise
 
         except Exception as e:
+            import traceback
+            tb_str = traceback.format_exc()
             self._logger.error(
-                "Streaming transcription failed",
+                f"Streaming transcription failed: {str(e)}\nTRACEBACK:\n{tb_str}",
                 extra={"error": str(e), "type": type(e).__name__}
             )
             raise TranscriptionException(
